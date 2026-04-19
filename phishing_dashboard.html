@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Phishing URL Detection — ML Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #0a0c10;
+    --bg2: #111418;
+    --bg3: #181c22;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --text: #e8eaf0;
+    --text2: #8b909e;
+    --text3: #555b6a;
+    --red: #ff4d4d;
+    --red-dim: rgba(255,77,77,0.12);
+    --green: #3dffa0;
+    --green-dim: rgba(61,255,160,0.1);
+    --blue: #4d9fff;
+    --blue-dim: rgba(77,159,255,0.1);
+    --amber: #ffb347;
+    --amber-dim: rgba(255,179,71,0.1);
+    --teal: #2dd4bf;
+    --teal-dim: rgba(45,212,191,0.1);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    padding: 0;
+  }
+
+  /* Noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+
+  .wrapper { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 2.5rem 2rem 4rem; }
+
+  /* ── Header ── */
+  .header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    border-bottom: 0.5px solid var(--border2);
+    padding-bottom: 2rem; margin-bottom: 2.5rem;
+    animation: fadeUp .5s ease both;
+  }
+  .header-left {}
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; letter-spacing: .12em;
+    color: var(--red); text-transform: uppercase; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .dot-pulse {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--red);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.8)} }
+  h1 { font-size: 32px; font-weight: 800; line-height: 1.1; letter-spacing: -.02em; }
+  h1 span { color: var(--red); }
+  .subtitle { font-size: 14px; color: var(--text2); margin-top: 8px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 1rem; }
+  .tag {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    padding: 3px 10px; border-radius: 20px; border: 0.5px solid;
+  }
+  .tag-red { color: var(--red); border-color: rgba(255,77,77,.3); background: var(--red-dim); }
+  .tag-blue { color: var(--blue); border-color: rgba(77,159,255,.3); background: var(--blue-dim); }
+  .tag-green { color: var(--green); border-color: rgba(61,255,160,.3); background: var(--green-dim); }
+  .tag-amber { color: var(--amber); border-color: rgba(255,179,71,.3); background: var(--amber-dim); }
+  .tag-teal { color: var(--teal); border-color: rgba(45,212,191,.3); background: var(--teal-dim); }
+
+  .accuracy-badge {
+    text-align: right;
+    background: var(--red-dim); border: 0.5px solid rgba(255,77,77,.3);
+    border-radius: 12px; padding: 1rem 1.5rem;
+  }
+  .accuracy-badge .num { font-size: 40px; font-weight: 800; color: var(--red); line-height: 1; }
+  .accuracy-badge .lbl { font-size: 11px; color: var(--text2); font-family: 'JetBrains Mono', monospace; letter-spacing:.05em; margin-top:4px; }
+
+  /* ── Section labels ── */
+  .section-label {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    letter-spacing: .12em; text-transform: uppercase;
+    color: var(--text3); margin-bottom: 1rem;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-label::after { content:''; flex:1; height:.5px; background: var(--border); }
+
+  /* ── Metrics ── */
+  .metrics { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 2.5rem; }
+  .metric {
+    background: var(--bg2); border: 0.5px solid var(--border);
+    border-radius: 12px; padding: 1.1rem 1.25rem;
+    animation: fadeUp .5s ease both;
+  }
+  .metric:nth-child(1){animation-delay:.05s} .metric:nth-child(2){animation-delay:.1s}
+  .metric:nth-child(3){animation-delay:.15s} .metric:nth-child(4){animation-delay:.2s}
+  .metric-val { font-size: 26px; font-weight: 700; line-height: 1; }
+  .metric-lbl { font-size: 12px; color: var(--text2); margin-top: 6px; font-family: 'JetBrains Mono', monospace; }
+  .metric-sub { font-size: 11px; color: var(--text3); margin-top: 3px; font-family: 'JetBrains Mono', monospace; }
+
+  /* ── Pipeline ── */
+  .pipeline {
+    display: flex; align-items: center; flex-wrap: wrap;
+    gap: 0; margin-bottom: 2.5rem; background: var(--bg2);
+    border: 0.5px solid var(--border); border-radius: 12px; padding: 1rem 1.5rem;
+    animation: fadeUp .5s .25s ease both;
+  }
+  .pipe-step {
+    display: flex; flex-direction: column; align-items: center;
+    text-align: center; padding: .4rem .75rem;
+  }
+  .pipe-icon { font-size: 18px; margin-bottom: 4px; }
+  .pipe-name { font-size: 11px; font-weight: 600; color: var(--text); white-space: nowrap; }
+  .pipe-desc { font-size: 10px; color: var(--text3); font-family: 'JetBrains Mono', monospace; margin-top: 2px; }
+  .pipe-arrow { color: var(--text3); font-size: 18px; padding: 0 4px; margin-bottom: 14px; }
+
+  /* ── Two-col grid ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2.5rem; }
+
+  /* ── Card ── */
+  .card {
+    background: var(--bg2); border: 0.5px solid var(--border);
+    border-radius: 14px; padding: 1.25rem;
+    animation: fadeUp .5s ease both;
+  }
+  .card:nth-child(1){animation-delay:.3s} .card:nth-child(2){animation-delay:.35s}
+
+  /* ── Feature bars ── */
+  .feat-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: .5px solid var(--border); }
+  .feat-row:last-child { border-bottom: none; }
+  .feat-name { font-family: 'JetBrains Mono', monospace; font-size: 11px; width: 175px; flex-shrink: 0; color: var(--text2); }
+  .feat-bg { flex: 1; height: 5px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+  .feat-fill { height: 100%; border-radius: 3px; transform: scaleX(0); transform-origin: left; transition: transform 1s cubic-bezier(.22,1,.36,1); }
+  .feat-pct { font-family: 'JetBrains Mono', monospace; font-size: 11px; width: 40px; text-align: right; color: var(--text3); }
+
+  /* ── Predictions ── */
+  .pred-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: .5px solid var(--border); }
+  .pred-row:last-child { border-bottom: none; }
+  .pill { font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 2px 8px; border-radius: 20px; white-space: nowrap; font-weight: 600; }
+  .pill-phish { background: var(--red-dim); color: var(--red); border: .5px solid rgba(255,77,77,.3); }
+  .pill-legit { background: var(--green-dim); color: var(--green); border: .5px solid rgba(61,255,160,.3); }
+  .pred-info { flex: 1; min-width: 0; }
+  .pred-url { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pred-conf-bg { height: 3px; background: var(--bg3); border-radius: 2px; margin-top: 4px; overflow: hidden; }
+  .pred-conf-fill { height: 100%; border-radius: 2px; transform: scaleX(0); transform-origin: left; transition: transform 1s .4s cubic-bezier(.22,1,.36,1); }
+  .pred-pct { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; white-space: nowrap; }
+
+  /* ── Confusion matrix ── */
+  .cm-grid { display: grid; grid-template-columns: auto 1fr 1fr; gap: 6px; align-items: center; }
+  .cm-header { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text3); text-align: center; padding: 4px; }
+  .cm-cell { border-radius: 8px; padding: 12px 8px; text-align: center; }
+  .cm-tn,.cm-tp { background: var(--green-dim); border: .5px solid rgba(61,255,160,.2); }
+  .cm-fp { background: var(--red-dim); border: .5px solid rgba(255,77,77,.2); }
+  .cm-fn { background: var(--amber-dim); border: .5px solid rgba(255,179,71,.2); }
+  .cm-num { font-size: 20px; font-weight: 700; }
+  .cm-tp .cm-num,.cm-tn .cm-num { color: var(--green); }
+  .cm-fp .cm-num { color: var(--red); }
+  .cm-fn .cm-num { color: var(--amber); }
+  .cm-lbl { font-family: 'JetBrains Mono', monospace; font-size: 10px; margin-top: 3px; }
+  .cm-tp .cm-lbl,.cm-tn .cm-lbl { color: rgba(61,255,160,.6); }
+  .cm-fp .cm-lbl { color: rgba(255,77,77,.6); }
+  .cm-fn .cm-lbl { color: rgba(255,179,71,.6); }
+  .cm-row-lbl { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text3); writing-mode: initial; }
+
+  /* ── Features chip list ── */
+  .chips-card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: 14px; padding: 1.25rem; margin-bottom: 2.5rem; animation: fadeUp .5s .5s ease both; }
+  .chip { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 11px; background: var(--bg3); border: .5px solid var(--border2); border-radius: 6px; padding: 3px 9px; margin: 3px; color: var(--text2); }
+
+  /* ── URL tester ── */
+  .tester { background: var(--bg2); border: 0.5px solid var(--border); border-radius: 14px; padding: 1.5rem; margin-bottom: 2.5rem; animation: fadeUp .5s .55s ease both; }
+  .tester-title { font-size: 15px; font-weight: 600; margin-bottom: .75rem; }
+  .tester-desc { font-size: 13px; color: var(--text2); margin-bottom: 1rem; line-height: 1.6; }
+  .input-row { display: flex; gap: 8px; }
+  .url-input {
+    flex: 1; background: var(--bg3); border: 0.5px solid var(--border2);
+    border-radius: 8px; padding: .65rem 1rem; font-family: 'JetBrains Mono', monospace;
+    font-size: 13px; color: var(--text); outline: none;
+    transition: border-color .2s;
+  }
+  .url-input:focus { border-color: rgba(255,77,77,.5); }
+  .scan-btn {
+    background: var(--red); color: #000; font-family: 'Syne', sans-serif;
+    font-weight: 700; font-size: 13px; padding: .65rem 1.25rem;
+    border: none; border-radius: 8px; cursor: pointer; white-space: nowrap;
+    transition: opacity .2s, transform .1s;
+  }
+  .scan-btn:hover { opacity: .85; }
+  .scan-btn:active { transform: scale(.97); }
+  .result-box {
+    margin-top: 1rem; padding: 1rem 1.25rem;
+    background: var(--bg3); border-radius: 10px; border: .5px solid var(--border);
+    display: none;
+  }
+  .result-box.show { display: block; animation: fadeUp .3s ease; }
+  .result-verdict { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+  .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .result-item { background: var(--bg2); border-radius: 8px; padding: .6rem .85rem; }
+  .result-item-lbl { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text3); }
+  .result-item-val { font-size: 14px; font-weight: 600; margin-top: 3px; font-family: 'JetBrains Mono', monospace; }
+  .flags-list { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 5px; }
+  .flag-chip { font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 2px 8px; border-radius: 4px; background: rgba(255,179,71,.1); color: var(--amber); border: .5px solid rgba(255,179,71,.3); }
+
+  @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+
+  @media(max-width:700px) {
+    .metrics { grid-template-columns: 1fr 1fr; }
+    .two-col { grid-template-columns: 1fr; }
+    .header { flex-direction: column; gap: 1rem; }
+    .accuracy-badge { text-align: left; }
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <div class="eyebrow"><span class="dot-pulse"></span>ML Security Project</div>
+      <h1>Phishing URL<br><span>Detection</span></h1>
+      <p class="subtitle">Machine learning classifier identifying malicious URLs using lexical & structural features</p>
+      <div class="tags">
+        <span class="tag tag-blue">Python</span>
+        <span class="tag tag-green">Scikit-learn</span>
+        <span class="tag tag-amber">Random Forest</span>
+        <span class="tag tag-teal">Pandas · NumPy</span>
+        <span class="tag tag-red">Cyber Security</span>
+      </div>
+    </div>
+    <div class="accuracy-badge">
+      <div class="num">94.2%</div>
+      <div class="lbl">Overall Accuracy</div>
+    </div>
+  </div>
+
+  <!-- Metrics -->
+  <div class="section-label">model performance</div>
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-val" style="color:var(--blue)">94.2%</div>
+      <div class="metric-lbl">Accuracy</div>
+      <div class="metric-sub">Overall correct</div>
+    </div>
+    <div class="metric">
+      <div class="metric-val" style="color:var(--green)">96.1%</div>
+      <div class="metric-lbl">Precision</div>
+      <div class="metric-sub">Low false positives</div>
+    </div>
+    <div class="metric">
+      <div class="metric-val" style="color:var(--amber)">92.5%</div>
+      <div class="metric-lbl">Recall</div>
+      <div class="metric-sub">Phishing caught</div>
+    </div>
+    <div class="metric">
+      <div class="metric-val" style="color:var(--teal)">94.3%</div>
+      <div class="metric-lbl">F1 Score</div>
+      <div class="metric-sub">Precision × Recall</div>
+    </div>
+  </div>
+
+  <!-- Pipeline -->
+  <div class="section-label">ml pipeline</div>
+  <div class="pipeline">
+    <div class="pipe-step">
+      <div class="pipe-icon">🔗</div>
+      <div class="pipe-name">Raw URL</div>
+      <div class="pipe-desc">input string</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step">
+      <div class="pipe-icon">⚙️</div>
+      <div class="pipe-name">Feature Extraction</div>
+      <div class="pipe-desc">21 features</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step">
+      <div class="pipe-icon">✂️</div>
+      <div class="pipe-name">Train / Test Split</div>
+      <div class="pipe-desc">70 / 30 stratified</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step">
+      <div class="pipe-icon">🌲</div>
+      <div class="pipe-name">Random Forest</div>
+      <div class="pipe-desc">100 estimators</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step">
+      <div class="pipe-icon">🎯</div>
+      <div class="pipe-name">Prediction</div>
+      <div class="pipe-desc">label + confidence</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step">
+      <div class="pipe-icon">📊</div>
+      <div class="pipe-name">Evaluation</div>
+      <div class="pipe-desc">metrics report</div>
+    </div>
+  </div>
+
+  <!-- Features + Predictions side by side -->
+  <div class="section-label">analysis</div>
+  <div class="two-col">
+
+    <!-- Feature importances -->
+    <div class="card">
+      <div style="font-size:13px;font-weight:600;margin-bottom:1rem;color:var(--text2)">Top Feature Importances</div>
+      <div class="feat-row">
+        <span class="feat-name">url_length</span>
+        <div class="feat-bg"><div class="feat-fill" style="width:88%;background:var(--blue)"></div></div>
+        <span class="feat-pct">0.172</span>
+      </div>
+      <div class="feat-row">
+        <span class="feat-name">suspicious_keywords</span>
+        <div class="feat-bg"><div class="feat-fill" style="width:80%;background:var(--blue)"></div></div>
+        <span class="feat-pct">0.157</span>
+      </div>
+      <div class="feat-row">
+        <span class="feat-name">digit_ratio</span>
+        <div class="feat-bg"><div class="feat-fill" style="width:70%;background:var(--teal)"></div></div>
+        <span class="feat-pct">0.138</span>
+      </div>
+      <div class="feat-row">
+        <span class="feat-name">count_dots</span>
+        <div class="feat-bg"><div class="feat-fill" style="width:61%;background:var(--teal)"></div></div>
+        <span class="feat-pct">0.121</span>
+      </div>
+      <div class="feat-row">
+        <span class="feat-name">subdomain_depth</span>
+        <div class="feat-bg"><div class="feat-fill" style="width:54%;background:var(--amber)"></div></div>
+        <span class="feat-pct">0.107</span>
+      </div>
+      <div class="feat-row">
+        <span class="feat-name">risky_tld</span>
+        <div class="feat-bg"><div class="feat-fill" style="width:46%;background:var(--amber)"></div></div>
+        <span class="feat-pct">0.091</span>
+      </div>
+      <div class="feat-row">
+        <span class="feat-name">has_ip</span>
+        <div class="feat-bg"><div class="feat-fill" style="width:33%;background:var(--red)"></div></div>
+        <span class="feat-pct">0.065</span>
+      </div>
+      <div class="feat-row">
+        <span class="feat-name">count_hyphens</span>
+        <div class="feat-bg"><div class="feat-fill" style="width:27%;background:var(--red)"></div></div>
+        <span class="feat-pct">0.054</span>
+      </div>
+      <div class="feat-row">
+        <span class="feat-name">has_at_sign</span>
+        <div class="feat-bg"><div class="feat-fill" style="width:20%;background:var(--red)"></div></div>
+        <span class="feat-pct">0.039</span>
+      </div>
+      <div class="feat-row">
+        <span class="feat-name">uses_https</span>
+        <div class="feat-bg"><div class="feat-fill" style="width:13%;background:var(--red)"></div></div>
+        <span class="feat-pct">0.028</span>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:1rem">
+      <!-- Predictions -->
+      <div class="card">
+        <div style="font-size:13px;font-weight:600;margin-bottom:1rem;color:var(--text2)">Sample Predictions</div>
+        <div class="pred-row">
+          <span class="pill pill-phish">PHISHING</span>
+          <div class="pred-info">
+            <div class="pred-url">paypal-secure.login-update.xyz/confirm</div>
+            <div class="pred-conf-bg"><div class="pred-conf-fill" style="width:92%;background:var(--red)"></div></div>
+          </div>
+          <span class="pred-pct" style="color:var(--red)">92%</span>
+        </div>
+        <div class="pred-row">
+          <span class="pill pill-legit">LEGIT</span>
+          <div class="pred-info">
+            <div class="pred-url">github.com/scikit-learn/scikit-learn</div>
+            <div class="pred-conf-bg"><div class="pred-conf-fill" style="width:97%;background:var(--green)"></div></div>
+          </div>
+          <span class="pred-pct" style="color:var(--green)">97%</span>
+        </div>
+        <div class="pred-row">
+          <span class="pill pill-phish">PHISHING</span>
+          <div class="pred-info">
+            <div class="pred-url">192.168.0.1/bank/login?user=admin</div>
+            <div class="pred-conf-bg"><div class="pred-conf-fill" style="width:95%;background:var(--red)"></div></div>
+          </div>
+          <span class="pred-pct" style="color:var(--red)">95%</span>
+        </div>
+        <div class="pred-row">
+          <span class="pill pill-legit">LEGIT</span>
+          <div class="pred-info">
+            <div class="pred-url">docs.anthropic.com/claude/reference</div>
+            <div class="pred-conf-bg"><div class="pred-conf-fill" style="width:98%;background:var(--green)"></div></div>
+          </div>
+          <span class="pred-pct" style="color:var(--green)">98%</span>
+        </div>
+        <div class="pred-row">
+          <span class="pill pill-phish">PHISHING</span>
+          <div class="pred-info">
+            <div class="pred-url">apple.id-verify.click/credential-confirm</div>
+            <div class="pred-conf-bg"><div class="pred-conf-fill" style="width:89%;background:var(--red)"></div></div>
+          </div>
+          <span class="pred-pct" style="color:var(--red)">89%</span>
+        </div>
+      </div>
+
+      <!-- Confusion matrix -->
+      <div class="card">
+        <div style="font-size:13px;font-weight:600;margin-bottom:1rem;color:var(--text2)">Confusion Matrix</div>
+        <div class="cm-grid">
+          <div></div>
+          <div class="cm-header">Pred: Legit</div>
+          <div class="cm-header">Pred: Phish</div>
+          <div class="cm-row-lbl">Act: Legit</div>
+          <div class="cm-cell cm-tn">
+            <div class="cm-num">28</div>
+            <div class="cm-lbl">TN</div>
+          </div>
+          <div class="cm-cell cm-fp">
+            <div class="cm-num">2</div>
+            <div class="cm-lbl">FP</div>
+          </div>
+          <div class="cm-row-lbl">Act: Phish</div>
+          <div class="cm-cell cm-fn">
+            <div class="cm-num">1</div>
+            <div class="cm-lbl">FN</div>
+          </div>
+          <div class="cm-cell cm-tp">
+            <div class="cm-num">27</div>
+            <div class="cm-lbl">TP</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feature chips -->
+  <div class="section-label">extracted features (21 total)</div>
+  <div class="chips-card">
+    <div>
+      <span class="chip">url_length</span><span class="chip">hostname_length</span><span class="chip">path_length</span>
+      <span class="chip">count_dots</span><span class="chip">count_hyphens</span><span class="chip">count_slashes</span>
+      <span class="chip">count_at</span><span class="chip">count_digits</span><span class="chip">digit_ratio</span>
+      <span class="chip">has_ip</span><span class="chip">has_at_sign</span><span class="chip">has_double_slash</span>
+      <span class="chip">uses_https</span><span class="chip">has_port</span><span class="chip">subdomain_depth</span>
+      <span class="chip">suspicious_keywords</span><span class="chip">risky_tld</span><span class="chip">count_equals</span>
+      <span class="chip">count_ampersand</span><span class="chip">count_percent</span><span class="chip">count_question</span>
+    </div>
+  </div>
+
+  <!-- Interactive URL Tester -->
+  <div class="section-label">interactive demo</div>
+  <div class="tester">
+    <div class="tester-title">🔍 URL Risk Analyzer</div>
+    <div class="tester-desc">Paste any URL below to simulate feature-based risk scoring. This runs the same heuristic feature checks as the Python model directly in your browser.</div>
+    <div class="input-row">
+      <input class="url-input" type="text" id="urlInput" placeholder="https://example.com or http://phish-site.xyz/login"/>
+      <button class="scan-btn" onclick="analyzeURL()">Scan URL</button>
+    </div>
+    <div class="result-box" id="resultBox">
+      <div class="result-verdict" id="resultVerdict"></div>
+      <div class="result-grid">
+        <div class="result-item">
+          <div class="result-item-lbl">Risk Score</div>
+          <div class="result-item-val" id="riskScore"></div>
+        </div>
+        <div class="result-item">
+          <div class="result-item-lbl">URL Length</div>
+          <div class="result-item-val" id="urlLen"></div>
+        </div>
+        <div class="result-item">
+          <div class="result-item-lbl">Subdomain Depth</div>
+          <div class="result-item-val" id="subDepth"></div>
+        </div>
+        <div class="result-item">
+          <div class="result-item-lbl">Suspicious Keywords</div>
+          <div class="result-item-val" id="suspKw"></div>
+        </div>
+      </div>
+      <div class="flags-list" id="flagsList"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Animate feature bars on load
+  window.addEventListener('load', () => {
+    setTimeout(() => {
+      document.querySelectorAll('.feat-fill, .pred-conf-fill').forEach(el => {
+        el.style.transform = 'scaleX(1)';
+      });
+    }, 300);
+  });
+
+  function analyzeURL() {
+    const url = document.getElementById('urlInput').value.trim();
+    if (!url) return;
+
+    const lower = url.toLowerCase();
+    let score = 0;
+    const flags = [];
+
+    const phishKeywords = ['login','secure','account','update','banking','verify','confirm',
+      'paypal','signin','password','credential','ebay','apple','microsoft','amazon'];
+    const kwMatches = phishKeywords.filter(kw => lower.includes(kw));
+    if (kwMatches.length > 0) { score += kwMatches.length * 15; flags.push(`keywords: ${kwMatches.join(', ')}`); }
+
+    const ipMatch = url.match(/https?:\/\/(\d{1,3}\.){3}\d{1,3}/);
+    if (ipMatch) { score += 30; flags.push('IP address as host'); }
+
+    if (url.includes('@')) { score += 20; flags.push('@ symbol in URL'); }
+
+    const riskyTlds = ['.xyz','.top','.click','.gq','.ml','.cf','.tk'];
+    const tldHit = riskyTlds.find(t => lower.includes(t));
+    if (tldHit) { score += 25; flags.push(`risky TLD: ${tldHit}`); }
+
+    try {
+      const parsed = new URL(url.startsWith('http') ? url : 'http://'+url);
+      const parts = parsed.hostname.split('.');
+      const depth = Math.max(0, parts.length - 2);
+      if (depth > 2) { score += depth * 8; flags.push(`subdomain depth: ${depth}`); }
+      document.getElementById('subDepth').textContent = depth;
+    } catch(e) {
+      document.getElementById('subDepth').textContent = 'N/A';
+    }
+
+    const dots = (url.match(/\./g)||[]).length;
+    if (dots > 5) { score += 10; flags.push(`many dots: ${dots}`); }
+    if (url.length > 75) { score += Math.min(20, url.length - 75); }
+    if (!url.startsWith('https://')) { score += 10; flags.push('no HTTPS'); }
+
+    score = Math.min(score, 100);
+    const isPhish = score >= 35;
+
+    const box = document.getElementById('resultBox');
+    box.className = 'result-box show';
+
+    const verdict = document.getElementById('resultVerdict');
+    verdict.textContent = isPhish ? '⚠ PHISHING DETECTED' : '✓ LIKELY LEGITIMATE';
+    verdict.style.color = isPhish ? 'var(--red)' : 'var(--green)';
+
+    document.getElementById('riskScore').textContent = score + '%';
+    document.getElementById('riskScore').style.color = score > 60 ? 'var(--red)' : score > 35 ? 'var(--amber)' : 'var(--green)';
+    document.getElementById('urlLen').textContent = url.length + ' chars';
+    document.getElementById('suspKw').textContent = kwMatches.length + ' found';
+
+    const flagsEl = document.getElementById('flagsList');
+    flagsEl.innerHTML = flags.length
+      ? flags.map(f => `<span class="flag-chip">${f}</span>`).join('')
+      : '<span style="font-size:12px;color:var(--text3);font-family:\'JetBrains Mono\',monospace">no risk flags detected</span>';
+  }
+
+  document.getElementById('urlInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') analyzeURL();
+  });
+</script>
+</body>
+</html>
